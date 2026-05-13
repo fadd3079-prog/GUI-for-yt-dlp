@@ -1,1 +1,1 @@
-"""Local desktop GUI for accurate yt-dlp format selection."""
+"""Local desktop GUI for simple yt-dlp downloads."""

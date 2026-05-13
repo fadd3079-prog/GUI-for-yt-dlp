@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 
+DEFAULT_OUTPUT_DIR = Path(r"C:\Users\mlfad\downloads\ytdlp")
+
 MODE_VIDEO_AUDIO = "Video + Audio"
 MODE_VIDEO_ONLY = "Video Only"
 MODE_AUDIO_MP3 = "Audio Only MP3"
@@ -10,7 +12,7 @@ MODE_AUDIO_ORIGINAL = "Audio Only Original"
 
 VIDEO_QUALITIES = ["Best", "1080p", "720p", "480p", "360p", "240p", "144p"]
 AUDIO_MP3_QUALITIES = ["Best VBR", "320K", "256K", "192K", "128K"]
-AUDIO_ORIGINAL_QUALITIES = ["Best", "M4A Preferred", "OPUS Preferred"]
+AUDIO_ORIGINAL_QUALITIES = ["Best", "M4A Preferred", "OPUS Preferred", "WEBM Preferred"]
 
 MODE_OPTIONS = [
     MODE_VIDEO_AUDIO,
@@ -45,7 +47,11 @@ def _output_template(output_dir: Path, suffix: str = "") -> str:
 
 
 def build_ytdlp_command(url: str, mode: str, quality: str, output_dir: Path) -> list[str]:
-    base = ["yt-dlp", "--no-playlist"]
+    if not url.strip():
+        raise ValueError("URL belum diisi.")
+
+    output_dir = Path(output_dir)
+    base = ["yt-dlp", "--newline", "--no-playlist"]
 
     if mode == MODE_VIDEO_AUDIO:
         command = [
@@ -102,6 +108,7 @@ def build_ytdlp_command(url: str, mode: str, quality: str, output_dir: Path) -> 
             "Best": "ba",
             "M4A Preferred": "ba[ext=m4a]/ba",
             "OPUS Preferred": "ba[ext=opus]/ba",
+            "WEBM Preferred": "ba[ext=webm]/ba",
         }
         selector = selectors.get(quality)
         if selector is None:

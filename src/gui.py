@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import command_builder, ytdlp_client
+from . import command_builder, utils, ytdlp_client
 
 
 class DependencyWorker(QThread):
@@ -31,7 +30,7 @@ class DependencyWorker(QThread):
 
     def run(self) -> None:
         self.log.emit("Checking dependencies...")
-        self.result.emit(ytdlp_client.check_dependencies())
+        self.result.emit(utils.check_dependencies())
 
 
 class DownloadWorker(QThread):
@@ -59,7 +58,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("YT-DLP GUI Local")
         self.resize(760, 560)
 
-        self.download_dir = ytdlp_client.DEFAULT_DOWNLOAD_DIR
+        self.download_dir = utils.DEFAULT_DOWNLOAD_DIR
         self.dependencies: dict[str, dict[str, Any]] = {}
         self.folder_ready = False
         self.dependency_worker: DependencyWorker | None = None
@@ -112,14 +111,14 @@ class MainWindow(QMainWindow):
 
         form.addRow("URL", self.url_input)
         form.addRow("Mode", self.mode_combo)
-        form.addRow("Kualitas", self.quality_combo)
+        form.addRow("Quality", self.quality_combo)
         root.addWidget(form_group)
 
         button_row = QHBoxLayout()
         self.download_button = QPushButton("Download")
         self.download_button.clicked.connect(self.start_download)
         self.download_button.setEnabled(False)
-        self.open_folder_button = QPushButton("Open Downloads Folder")
+        self.open_folder_button = QPushButton("Open Folder")
         self.open_folder_button.clicked.connect(self.open_download_folder)
         self.clear_log_button = QPushButton("Clear Log")
         self.clear_log_button.clicked.connect(self.clear_log)
@@ -130,7 +129,7 @@ class MainWindow(QMainWindow):
         root.addLayout(button_row)
 
         status_row = QHBoxLayout()
-        status_title = QLabel("Status akhir:")
+        status_title = QLabel("Status:")
         self.status_label = QLabel("Ready")
         self.status_label.setObjectName("Status")
         status_row.addWidget(status_title)
@@ -142,9 +141,13 @@ class MainWindow(QMainWindow):
         self.result_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         root.addWidget(self.result_label)
 
+        log_label = QLabel("Log")
+        log_label.setObjectName("SectionLabel")
+        root.addWidget(log_label)
+
         self.log_area = QTextEdit()
         self.log_area.setReadOnly(True)
-        self.log_area.setPlaceholderText("Progress dan log yt-dlp akan muncul di sini.")
+        self.log_area.setPlaceholderText("Log yt-dlp akan muncul di sini.")
         root.addWidget(self.log_area, 1)
 
         self.on_mode_changed(self.mode_combo.currentText())
@@ -164,6 +167,10 @@ class MainWindow(QMainWindow):
             }
             QLabel#Note {
                 color: #aeb6c2;
+            }
+            QLabel#SectionLabel {
+                color: #cbd4df;
+                font-weight: 700;
             }
             QLabel#Status {
                 font-weight: 700;
@@ -217,7 +224,7 @@ class MainWindow(QMainWindow):
 
     def _prepare_download_folder(self) -> None:
         try:
-            ytdlp_client.ensure_download_dir(self.download_dir)
+            utils.ensure_download_dir(self.download_dir)
         except Exception as exc:  # noqa: BLE001 - surfaced in GUI.
             self.folder_ready = False
             self.append_log(str(exc))
@@ -242,14 +249,18 @@ class MainWindow(QMainWindow):
 
         if not result.get("yt-dlp", {}).get("available"):
             self.download_button.setEnabled(False)
-            self.set_status("Failed", "yt-dlp tidak ditemukan. Install yt-dlp atau tambahkan ke PATH.", True)
+            self.set_status(
+                "Failed",
+                "yt-dlp tidak ditemukan. Pastikan yt-dlp sudah terinstall dan tersedia di PATH.",
+                True,
+            )
             return
 
         self.download_button.setEnabled(self.folder_ready)
         self.set_status("Ready", "Siap download.")
 
         if not result.get("ffmpeg", {}).get("available"):
-            self.append_log("Warning: ffmpeg Missing. Merge video+audio atau convert MP3 bisa gagal.")
+            self.append_log("Warning: FFmpeg tidak ditemukan. Merge video + audio atau convert ke MP3 bisa gagal.")
         if not result.get("ffprobe", {}).get("available"):
             self.append_log("Info: ffprobe Missing. Aplikasi tetap bisa download tanpa verifikasi detail.")
 
@@ -276,25 +287,29 @@ class MainWindow(QMainWindow):
     def start_download(self) -> None:
         url = self.url_input.text().strip()
         if not url:
-            self.set_status("Failed", "URL kosong. Paste URL terlebih dahulu.", True)
+            self.set_status("Failed", "URL belum diisi.", True)
             return
-        if not self._looks_like_url(url):
+        if not utils.looks_like_url(url):
             self.set_status("Failed", "URL tidak valid. Gunakan URL http atau https.", True)
             return
         if not self.folder_ready:
             self.set_status("Failed", f"Folder download tidak siap: {self.download_dir}", True)
             return
         if not self.dependencies.get("yt-dlp", {}).get("available"):
-            self.set_status("Failed", "yt-dlp tidak ditemukan. Download tidak bisa berjalan.", True)
+            self.set_status(
+                "Failed",
+                "yt-dlp tidak ditemukan. Pastikan yt-dlp sudah terinstall dan tersedia di PATH.",
+                True,
+            )
             return
 
         mode = self.mode_combo.currentText()
         quality = self.quality_combo.currentText()
 
         if mode == command_builder.MODE_VIDEO_AUDIO and not self.dependencies.get("ffmpeg", {}).get("available"):
-            self.append_log("Warning: ffmpeg Missing. Merge video+audio bisa gagal.")
+            self.append_log("Warning: FFmpeg tidak ditemukan. Merge video + audio bisa gagal.")
         if mode == command_builder.MODE_AUDIO_MP3 and not self.dependencies.get("ffmpeg", {}).get("available"):
-            self.append_log("Warning: ffmpeg Missing. Convert MP3 bisa gagal.")
+            self.append_log("Warning: FFmpeg tidak ditemukan. Convert ke MP3 bisa gagal.")
 
         try:
             command = command_builder.build_ytdlp_command(url, mode, quality, self.download_dir)
@@ -303,7 +318,7 @@ class MainWindow(QMainWindow):
             return
 
         self.download_button.setEnabled(False)
-        self.set_status("Downloading", f"Mode: {mode} | Kualitas: {quality}")
+        self.set_status("Downloading", f"Mode: {mode} | Quality: {quality}")
         self.append_log("")
         self.append_log(f"Starting download: {mode} / {quality}")
 
@@ -315,7 +330,7 @@ class MainWindow(QMainWindow):
         self.download_worker.start()
 
     def on_download_success(self, file_path: str) -> None:
-        self.set_status("Finished", f"File selesai: {file_path}")
+        self.set_status("Finished", f"Download selesai. Cek folder output. File: {file_path}")
         self.append_log(f"Finished: {file_path}")
 
     def on_download_failure(self, message: str) -> None:
@@ -328,7 +343,7 @@ class MainWindow(QMainWindow):
 
     def open_download_folder(self) -> None:
         try:
-            ytdlp_client.ensure_download_dir(self.download_dir)
+            utils.ensure_download_dir(self.download_dir)
         except Exception as exc:  # noqa: BLE001 - surfaced in GUI.
             self.set_status("Failed", str(exc), True)
             return
@@ -346,7 +361,3 @@ class MainWindow(QMainWindow):
         self.status_label.setStyleSheet("color: #ff9b9b;" if is_error else "color: #aee9b1;")
         self.result_label.setText(detail)
         self.result_label.setStyleSheet("color: #ffb1b1;" if is_error else "color: #c9d2df;")
-
-    @staticmethod
-    def _looks_like_url(value: str) -> bool:
-        return bool(re.match(r"^https?://\S+$", value, flags=re.IGNORECASE))

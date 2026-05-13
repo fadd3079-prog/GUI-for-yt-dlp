@@ -3,60 +3,11 @@ from __future__ import annotations
 import subprocess
 import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 
+from .utils import CREATE_NO_WINDOW, DEFAULT_DOWNLOAD_DIR, command_to_display, ensure_download_dir, friendly_error_message
 
-DEFAULT_DOWNLOAD_DIR = Path(r"C:\Users\mlfad\downloads\ytdlp")
-CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 LogCallback = Callable[[str], None]
-
-
-def ensure_download_dir(path: Path = DEFAULT_DOWNLOAD_DIR) -> Path:
-    try:
-        path.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        raise RuntimeError(f"Folder download tidak bisa dibuat: {path}. Detail: {exc}") from exc
-    if not path.is_dir():
-        raise RuntimeError(f"Path download bukan folder: {path}")
-    return path
-
-
-def command_to_display(command: list[str]) -> str:
-    return subprocess.list2cmdline(command)
-
-
-def check_tool(name: str, args: list[str]) -> dict[str, Any]:
-    try:
-        result = subprocess.run(
-            [name, *args],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=10,
-            creationflags=CREATE_NO_WINDOW,
-        )
-    except FileNotFoundError:
-        return {"name": name, "available": False, "error": f"{name} tidak ditemukan di PATH."}
-    except subprocess.TimeoutExpired:
-        return {"name": name, "available": False, "error": f"{name} tidak merespons."}
-
-    output = (result.stdout or result.stderr or "").strip()
-    first_line = output.splitlines()[0] if output else ""
-    return {
-        "name": name,
-        "available": result.returncode == 0,
-        "error": "" if result.returncode == 0 else (first_line or f"{name} gagal dijalankan."),
-    }
-
-
-def check_dependencies() -> dict[str, dict[str, Any]]:
-    return {
-        "yt-dlp": check_tool("yt-dlp", ["--version"]),
-        "ffmpeg": check_tool("ffmpeg", ["-version"]),
-        "ffprobe": check_tool("ffprobe", ["-version"]),
-    }
 
 
 def _path_from_line(line: str, output_dir: Path) -> Path | None:
@@ -108,22 +59,6 @@ def _find_newest_download(output_dir: Path, started_at: float) -> Path | None:
     if not candidates:
         return None
     return max(candidates, key=lambda item: item.stat().st_mtime)
-
-
-def friendly_error_message(output: str) -> str:
-    lower = output.lower()
-    messages: list[str] = []
-
-    if "http error 429" in lower or "too many requests" in lower:
-        messages.append("YouTube membatasi request sementara. Coba lagi nanti atau gunakan URL lain.")
-
-    if "requested format is not available" in lower or "format is not available" in lower:
-        messages.append("Format tidak tersedia. Coba pilih Best atau kualitas lain.")
-
-    if not messages:
-        return output
-
-    return f"{output}\n\n" + "\n".join(messages)
 
 
 def run_download(

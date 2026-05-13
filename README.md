@@ -51,7 +51,7 @@ C:\Users\mlfad\downloads\ytdlp
 - `Video + Audio`: download video dengan audio. Mode ini memakai selector `bv*+ba/b`; kualitas tertentu memakai `-S res:ANGKA,fps`.
 - `Video Only`: download video tanpa audio memakai selector `bv`; kualitas tertentu memakai `-S res:ANGKA,fps`. Mode ini tidak memakai `bv*`.
 - `Audio Only MP3`: download audio terbaik lalu convert ke MP3. Pilihan kualitasnya adalah `Best VBR`, `320K`, `256K`, `192K`, dan `128K`.
-- `Audio Only Original`: download audio terbaik dalam format asli, atau preferensi `m4a`/`opus`.
+- `Audio Only Original`: download audio terbaik dalam format asli, atau preferensi `m4a`/`opus`/`webm`.
 
 Jika kualitas tertentu tidak tersedia, pilih `Best` atau kualitas lain.
 
